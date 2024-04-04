@@ -1,19 +1,25 @@
 package org.table.copier;
 
-import org.table.copier.TableCopier;
+import org.table.exception.CreateTableException;
+import org.table.model.ShowCreateTable;
+import org.table.tools.executor.QueryExecutor;
+import org.table.tools.executor.SimpleQueryExecutor;
+import org.table.tools.strategy.Converter;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
 
-
 public class MySQLTableCopier implements TableCopier {
     protected final Connection connection;
+    protected final QueryExecutor executor;
 
 
-    MySQLTableCopier(Connection connection) throws SQLException {
+    MySQLTableCopier(Connection connection) {
         this.connection = connection;
+        this.executor = new SimpleQueryExecutor(connection, Converter.CAMEL_CASE);
     }
 
     @Override
@@ -26,68 +32,68 @@ public class MySQLTableCopier implements TableCopier {
 
 
     @Override
-    public void copy(String sourceSchema, String targetSchema) throws SQLException {
+    public void copy(String sourceSchema, String targetSchema) throws Exception {
         createSchema(targetSchema);
+        String ip = getIp();
+        grantPermissions(targetSchema, "TESTER", ip);
         copyTables(sourceSchema, targetSchema);
     }
 
-
-
-//    private void grantPermissions(String schema) throws SQLException {
-//        try (PreparedStatement statement = connection.prepareStatement(
-//                "GRANT ALL PRIVILEGES ON " + schema + ".* TO ?@'%'")) {
-//            statement.setString(1, username);
-//            statement.execute();
-//        }
-//    }
-
-    private void createSchema(String schema) throws SQLException {
-        try(PreparedStatement statement = connection.prepareStatement("CREATE SCHEMA IF NOT EXISTS " + schema)){
-            statement.execute();
-        }
+    private String getIp() throws SQLException {
+        String jdbcURL = connection.getMetaData().getURL();
+        return null;
     }
 
-    private void copyTables(String sourceSchema, String targetSchema) throws SQLException {
+    private void grantPermissions(String schema, String username, String ip) throws Exception {
+        String query = String.format("GRANT CREATE, ALTER, SELECT, INSERT, UPDATE, DELETE, REFERENCES, INDEX ON %s.* TO '%s'@'%s'",
+                schema,
+                username,
+                ip
+        );
+        executor.doExecute(query, null);
+    }
+
+
+    private void createSchema(String schema) throws Exception {
+        String query = String.format("CREATE SCHEMA IF NOT EXISTS %s", schema);
+        executor.doExecute(query, null);
+    }
+
+    private void copyTables(String sourceSchema, String targetSchema) throws Exception {
         List<String> tableNames = getTableNames(sourceSchema);
+        List<String> createTableQueries = new ArrayList<>();
         for (String tableName : tableNames) {
-            copyTable(sourceSchema, targetSchema, tableName);
+            String createTableSQL = getCreateTableSQL(sourceSchema, tableName);
+            String newCreateTableSQL = createTableSQL.replace(sourceSchema, targetSchema);
+            createTableQueries.add(newCreateTableSQL);
+        }
+        useSchema(targetSchema);
+        for (String createTableSQL : createTableQueries) {
+            executor.doExecute(createTableSQL, null);
         }
     }
 
-    private List<String> getTableNames(String schema) throws SQLException {
-        List<String> tableNames = new ArrayList<>();
-        try(PreparedStatement statement = connection.prepareStatement(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = ?")){
-            statement.setString(1, schema);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    tableNames.add(resultSet.getString("table_name"));
-                }
-            }
-        }
-        return tableNames;
-    }
-
-    private void copyTable(String sourceSchema, String targetSchema, String tableName) throws SQLException {
-        String createTableSql = getCreateTableSql(sourceSchema, tableName);
-        String newCreateTableSql = createTableSql.replace(sourceSchema, targetSchema);
-        try(PreparedStatement statement = connection.prepareStatement(newCreateTableSql)){
-            statement.execute();
-        }
-
+    private List<String> getTableNames(String schema) throws Exception {
+        String query = "SELECT table_name FROM information_schema.tables WHERE table_schema = ?";
+        return executor.doExecute(query, String.class, schema);
     }
 
 
-    private String getCreateTableSql(String schema, String tableName) throws SQLException {
-        String createTableSql = null;
-        try(PreparedStatement statement = connection.prepareStatement("SHOW CREATE TABLE " + schema + "." + tableName)){
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    createTableSql = resultSet.getString(2);
-                }
-            }
+    private void useSchema(String schema) throws Exception {
+        executor.doExecute("USE " + schema, null);
+    }
+
+
+    private String getCreateTableSQL(String schema, String tableName) throws Exception {
+        String query = String.format("SHOW CREATE TABLE %s.%s",
+                schema,
+                tableName
+        );
+        List<ShowCreateTable> showCreateTables = executor.doExecute(query, ShowCreateTable.class);
+        if (showCreateTables.isEmpty()) {
+            throw new CreateTableException("Create table query execution failed. try check source schema");
         }
-        return createTableSql;
+        return showCreateTables.get(0).getCreateTable();
     }
 
 

@@ -16,23 +16,22 @@ public class TableCopierFactory {
     public static TableCopier create(DataSource dataSource) throws SQLException {
         TableCopier tableCopier;
         DataSourceValidator validator;
-        try (Connection connection = dataSource.getConnection()) {
-            String jdbcURL = connection.getMetaData().getURL();
-            if (jdbcURL.startsWith(MYSQL_PREFIX)) {
-                tableCopier = new MySQLTableCopier(connection);
-                validator = new MySQLValidator(connection);
-            } else if (jdbcURL.startsWith(MARIADB_PREFIX)) {
-                tableCopier = new MariaDBTableCopier(connection);
-                validator = new MariaDBValidator(connection);
-            } else {
-                throw new IllegalArgumentException("Unsupported database type: " + jdbcURL);
-            }
-            if(!validator.isRootUser()){
-                throw new InvalidUserException("Invalid data source has founded. only root user allowed.");
-            }
+        Connection connection = dataSource.getConnection();
+        String jdbcURL = connection.getMetaData().getURL();
+        if (jdbcURL.startsWith(MYSQL_PREFIX)) {
+            tableCopier = new MySQLTableCopier(connection);
+            validator = new MySQLValidator(connection);
+        } else if (jdbcURL.startsWith(MARIADB_PREFIX)) {
+            tableCopier = new MariaDBTableCopier(connection);
+            validator = new MariaDBValidator(connection);
+        } else {
+            throw new IllegalArgumentException("Unsupported database type: " + jdbcURL);
         }
+        if (!validator.isRootUser()) {
+            throw new InvalidUserException("Invalid data source has founded. only root user allowed.");
+        }
+
         return tableCopier;
     }
-
 
 }

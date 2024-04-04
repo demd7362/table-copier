@@ -18,7 +18,7 @@ public class MySQLValidator implements DataSourceValidator {
         try(Statement statement = connection.createStatement()){
             try(ResultSet resultSet = statement.executeQuery(query)){
                 if(resultSet.next()){
-                    String currentUser = resultSet.getString(1);
+                    String currentUser = resultSet.getString(1).split("@")[0];
                     return currentUser.equalsIgnoreCase("root");
                 }
             }
