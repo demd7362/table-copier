@@ -1,5 +1,6 @@
 package org.table.copier;
 
+import org.apache.commons.dbcp2.BasicDataSource;
 import org.table.exception.CreateTableException;
 import org.table.model.ShowCreateTable;
 import org.table.tools.executor.QueryExecutor;
@@ -7,31 +8,28 @@ import org.table.tools.executor.SimpleQueryExecutor;
 import org.table.tools.strategy.Converter;
 
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-
-public class MySQLTableCopier implements TableCopier {
+public class OracleTableCopier implements TableCopier {
     protected final Connection connection;
     protected final QueryExecutor executor;
 
-
-    MySQLTableCopier(Connection connection) {
+    OracleTableCopier(Connection connection) {
         this.connection = connection;
         this.executor = new SimpleQueryExecutor(connection, Converter.CAMEL_CASE);
     }
 
-//    public static void main(String[] args) throws Exception {
-//        BasicDataSource dataSource = new BasicDataSource();
-//        dataSource.setDriverClassName("com.mysql.jdbc.Driver");
-//        dataSource.setUrl("jdbc:mysql://localhost:3306");
-//        dataSource.setUsername("root");
-//        dataSource.setPassword("Wjd999888!");
-//        Connection connection = dataSource.getConnection();
-//        TableCopier tableCopier = new MySQLTableCopier(connection);
-//        tableCopier.copy("SPM", "SPM2");
-//    }
+    public static void main(String[] args) throws Exception {
+        BasicDataSource dataSource = new BasicDataSource();
+        dataSource.setDriverClassName("oracle.jdbc.driver.OracleDriver");
+        dataSource.setUrl("jdbc:oracle:thin:@localhost:1521:orcl");
+        dataSource.setUsername("system");
+        dataSource.setPassword("password");
+        Connection connection = dataSource.getConnection();
+        TableCopier tableCopier = new OracleTableCopier(connection);
+        tableCopier.copy("SOURCE_SCHEMA", "TARGET_SCHEMA");
+    }
 
     @Override
     public void close() throws Exception {
@@ -44,27 +42,11 @@ public class MySQLTableCopier implements TableCopier {
     @Override
     public void copy(String sourceSchema, String targetSchema) throws Exception {
         createSchema(targetSchema);
-//        String ip = getIp();
-//        grantPermissions(targetSchema, "TESTER", ip);
         copyTables(sourceSchema, targetSchema);
     }
 
-    private String getIp() throws SQLException {
-        String jdbcURL = connection.getMetaData().getURL();
-        return null;
-    }
-
-    private void grantPermissions(String schema, String username, String ip) throws Exception {
-        String query = String.format("GRANT CREATE, ALTER, SELECT, INSERT, UPDATE, DELETE, REFERENCES, INDEX ON %s.* TO '%s'@'%s'",
-                schema,
-                username,
-                ip
-        );
-        executor.doExecute(query, null);
-    }
-
     private void createSchema(String schema) throws Exception {
-        String query = String.format("CREATE SCHEMA IF NOT EXISTS %s", schema);
+        String query = String.format("CREATE USER %s IDENTIFIED BY password DEFAULT TABLESPACE users QUOTA UNLIMITED ON users", schema);
         executor.doExecute(query, null);
     }
 
@@ -76,35 +58,28 @@ public class MySQLTableCopier implements TableCopier {
             String newCreateTableSQL = createTableSQL.replace(sourceSchema, targetSchema);
             createTableQueries.add(newCreateTableSQL);
         }
-        useSchema(targetSchema);
         for (String createTableSQL : createTableQueries) {
             executor.doExecute(createTableSQL, null);
         }
     }
 
     private List<String> getTableNames(String schema) throws Exception {
-        String query = "SELECT table_name FROM information_schema.tables WHERE table_schema = ?";
+        String query = "SELECT table_name FROM all_tables WHERE owner = ?";
         return executor.doExecute(query, String.class, schema);
     }
 
-    private void useSchema(String schema) throws Exception {
-        executor.doExecute("USE " + schema, null);
-    }
-
     private String getCreateTableSQL(String schema, String tableName) throws Exception {
-        String query = String.format("SHOW CREATE TABLE %s.%s",
-                schema,
-                tableName
+        String query = String.format("SELECT dbms_metadata.get_ddl('TABLE','%s','%s') FROM dual",
+                tableName,
+                schema
         );
         List<ShowCreateTable> showCreateTables = executor.doExecute(query, ShowCreateTable.class);
         if (showCreateTables == null || showCreateTables.isEmpty()) {
             String message = String.format("Create table query execution failed. check your query `%s`", query);
             throw new CreateTableException(message);
         }
-        String result = showCreateTables.get(0).getCreateTable().replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS");
+        String result = showCreateTables.get(0).getCreateTable();
         System.out.println(result);
         return result;
     }
-
-
 }

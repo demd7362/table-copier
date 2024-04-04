@@ -21,19 +21,47 @@ public class SimpleQueryExecutor implements QueryExecutor {
 
     @Override
     public <T> List<T> doExecute(@NonNull String query, Class<T> clazz) throws Exception {
-        try (PreparedStatement statement = connection.prepareStatement(query);
-             ResultSet resultSet = statement.executeQuery()) {
-            if (clazz == null) {
-                return null;
-            } else if (clazz == String.class) {
-                return (List<T>) bindString(resultSet);
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
+            boolean hasResultSet = statement.execute();
+            if (hasResultSet) {
+                try (ResultSet resultSet = statement.getResultSet()) {
+                    if (clazz == null) {
+                        return null;
+                    } else if (clazz == String.class) {
+                        return (List<T>) bindAsString(resultSet);
+                    } else {
+                        return bindAsObject(resultSet, clazz);
+                    }
+                }
             } else {
-                return bindObject(resultSet, clazz);
+                return null;
             }
         }
     }
 
-    protected List<String> bindString(ResultSet resultSet) throws Exception {
+    public <T> List<T> doExecute(@NonNull String query, Class<T> clazz, String... args) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
+            for (int i = 0; i < args.length; i++) {
+                statement.setString(i + 1, args[i]);
+            }
+            boolean hasResultSet = statement.execute();
+            if (hasResultSet) {
+                try (ResultSet resultSet = statement.getResultSet()) {
+                    if (clazz == null) {
+                        return null;
+                    } else if (clazz == String.class) {
+                        return (List<T>) bindAsString(resultSet);
+                    } else {
+                        return bindAsObject(resultSet, clazz);
+                    }
+                }
+            } else {
+                return null;
+            }
+        }
+    }
+
+    protected List<String> bindAsString(ResultSet resultSet) throws Exception {
         List<String> list = new ArrayList<>();
         while (resultSet.next()) {
             Object value = resultSet.getObject(1);
@@ -42,7 +70,7 @@ public class SimpleQueryExecutor implements QueryExecutor {
         return list;
     }
 
-    protected <T> List<T> bindObject(ResultSet resultSet, Class<T> clazz) throws Exception {
+    protected <T> List<T> bindAsObject(ResultSet resultSet, Class<T> clazz) throws Exception {
         List<T> list = new ArrayList<>();
         ResultSetMetaData metaData = resultSet.getMetaData();
         int columnCount = metaData.getColumnCount();
@@ -58,20 +86,6 @@ public class SimpleQueryExecutor implements QueryExecutor {
         return list;
     }
 
-    public <T> List<T> doExecute(@NonNull String query, Class<T> clazz, String... args) throws Exception {
-        try (PreparedStatement statement = connection.prepareStatement(query)) {
-            for (int i = 0; i < args.length; i++) {
-                statement.setString(i + 1, args[i]);
-            }
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (clazz == null) {
-                    return null;
-                } else {
-                    return bindObject(resultSet, clazz);
-                }
-            }
-        }
-    }
 
     protected <T> T createInstance(Class<T> targetClass) throws Exception {
         return targetClass.getDeclaredConstructor().newInstance();
@@ -79,7 +93,7 @@ public class SimpleQueryExecutor implements QueryExecutor {
 
     protected void bind(Object instance, String columnName, Object value) throws Exception {
         try {
-            String camelCaseColumnName = converter.convertStrategy().convert(columnName);
+            String camelCaseColumnName = converter.getStrategy().convert(columnName);
             Field targetField = instance.getClass().getDeclaredField(camelCaseColumnName);
             targetField.setAccessible(true);
             if (targetField.getType().isAssignableFrom(value.getClass())) {

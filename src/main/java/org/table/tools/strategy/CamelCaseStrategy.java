@@ -1,5 +1,9 @@
 package org.table.tools.strategy;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
+@NoArgsConstructor(access = AccessLevel.PACKAGE)
 public class CamelCaseStrategy implements ConvertStrategy {
 
     @Override

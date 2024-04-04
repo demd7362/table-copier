@@ -1,16 +1,11 @@
 package org.table.tools.strategy;
 
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@RequiredArgsConstructor
+@Getter
 public enum Converter {
-    CAMEL_CASE {
-        private ConvertStrategy strategy;
-
-        public ConvertStrategy convertStrategy() {
-            if (strategy == null) {
-                strategy = new CamelCaseStrategy();
-            }
-            return strategy;
-        }
-    };
-
-    public abstract ConvertStrategy convertStrategy();
+    CAMEL_CASE(new CamelCaseStrategy());
+    private final ConvertStrategy strategy;
 }
