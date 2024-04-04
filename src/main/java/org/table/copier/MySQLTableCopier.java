@@ -1,31 +1,19 @@
-package org.table;
+package org.table.copier;
 
-import lombok.NoArgsConstructor;
-import org.apache.commons.dbcp2.BasicDataSource;
+import org.table.copier.TableCopier;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
 
 
 public class MySQLTableCopier implements TableCopier {
-    private final DataSource dataSource;
-    private final String username;
-    private final String password;
-    private final Connection connection;
+    protected final Connection connection;
 
 
-    MySQLTableCopier(DataSource dataSource) throws SQLException {
-        this.connection = dataSource.getConnection();
-        BasicDataSource basicDataSource = (BasicDataSource) dataSource;
-        this.username = basicDataSource.getUsername(); // need fix
-        this.password = basicDataSource.getPassword(); // need fix
-        this.dataSource = dataSource;
+    MySQLTableCopier(Connection connection) throws SQLException {
+        this.connection = connection;
     }
 
     @Override
@@ -38,20 +26,20 @@ public class MySQLTableCopier implements TableCopier {
 
 
     @Override
-    public DataSource generate(String sourceSchema, String targetSchema) throws SQLException {
+    public void copy(String sourceSchema, String targetSchema) throws SQLException {
         createSchema(targetSchema);
         copyTables(sourceSchema, targetSchema);
-        grantPermissions(targetSchema);
-        return createDataSource(targetSchema);
     }
 
-    private void grantPermissions(String schema) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "GRANT ALL PRIVILEGES ON " + schema + ".* TO ?@'%'")) {
-            statement.setString(1, username);
-            statement.execute();
-        }
-    }
+
+
+//    private void grantPermissions(String schema) throws SQLException {
+//        try (PreparedStatement statement = connection.prepareStatement(
+//                "GRANT ALL PRIVILEGES ON " + schema + ".* TO ?@'%'")) {
+//            statement.setString(1, username);
+//            statement.execute();
+//        }
+//    }
 
     private void createSchema(String schema) throws SQLException {
         try(PreparedStatement statement = connection.prepareStatement("CREATE SCHEMA IF NOT EXISTS " + schema)){
@@ -102,11 +90,5 @@ public class MySQLTableCopier implements TableCopier {
         return createTableSql;
     }
 
-    private DataSource createDataSource(String schema) throws SQLException {
-        BasicDataSource dataSource = new BasicDataSource();
-        dataSource.setUrl(this.dataSource.getConnection().getMetaData().getURL() + "/" + schema);
-        dataSource.setUsername(username);
-        dataSource.setPassword(password);
-        return dataSource;
-    }
+
 }
