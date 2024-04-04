@@ -100,7 +100,7 @@ public class SimpleQueryExecutor implements QueryExecutor {
                 targetField.set(instance, value);
             }
         } catch (NoSuchFieldException ignored) {
-
+            // TODO add logging code for ignored field
         }
     }
 
